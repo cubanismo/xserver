@@ -148,6 +148,11 @@ typedef union {
     SyncAwait	    await;
 } SyncAwaitUnion;
 
+typedef struct _SyncFence {
+    ClientPtr		client;		/* Owning client. */
+    XSyncFence		id;		/* resource ID */
+    BOOL		triggered;	/* counter value */
+} SyncFence;
 
 extern pointer SyncCreateSystemCounter(
     char *	/* name */,
