@@ -120,6 +120,8 @@ static DISPATCH_PROC(ProcSyncCreateFence);
 static DISPATCH_PROC(ProcSyncTriggerFence);
 static DISPATCH_PROC(ProcSyncResetFence);
 static DISPATCH_PROC(ProcSyncDestroyFence);
+static DISPATCH_PROC(ProcSyncQueryFence);
+static DISPATCH_PROC(ProcSyncAwaitFence);
 static DISPATCH_PROC(SProcSyncAwait);
 static DISPATCH_PROC(SProcSyncChangeAlarm);
 static DISPATCH_PROC(SProcSyncChangeCounter);
@@ -139,6 +141,8 @@ static DISPATCH_PROC(SProcSyncCreateFence);
 static DISPATCH_PROC(SProcSyncTriggerFence);
 static DISPATCH_PROC(SProcSyncResetFence);
 static DISPATCH_PROC(SProcSyncDestroyFence);
+static DISPATCH_PROC(SProcSyncQueryFence);
+static DISPATCH_PROC(SProcSyncAwaitFence);
 
 /*  Each counter maintains a simple linked list of triggers that are
  *  interested in the counter.  The two functions below are used to
@@ -299,7 +303,7 @@ SyncInitTrigger(ClientPtr client, SyncTrigger *pTrigger, XID syncObject,
     SyncObject *pSync = pTrigger->pSync;
     SyncCounter *pCounter = NULL;
     int		rc;
-    Bool	newcounter = FALSE;
+    Bool	newSyncObject = FALSE;
 
     if (changes & XSyncCACounter)
     {
@@ -315,7 +319,7 @@ SyncInitTrigger(ClientPtr client, SyncTrigger *pTrigger, XID syncObject,
 	{ /* new counter for trigger */
 	    SyncDeleteTriggerFromSyncObject(pTrigger);
 	    pTrigger->pSync = pSync;
-	    newcounter = TRUE;
+	    newSyncObject = TRUE;
 	}
     }
 
@@ -344,30 +348,37 @@ SyncInitTrigger(ClientPtr client, SyncTrigger *pTrigger, XID syncObject,
 
     if (changes & XSyncCATestType)
     {
-	if (pTrigger->test_type != XSyncPositiveTransition &&
-	    pTrigger->test_type != XSyncNegativeTransition &&
-	    pTrigger->test_type != XSyncPositiveComparison &&
-	    pTrigger->test_type != XSyncNegativeComparison)
+	if (SYNC_FENCE == pSync->type)
 	{
-	    client->errorValue = pTrigger->test_type;
-	    return BadValue;
+	    pTrigger->CheckTrigger = SyncCheckTriggerFence;
 	}
-	/* select appropriate CheckTrigger function */
-
-	switch (pTrigger->test_type)
+	else
 	{
-        case XSyncPositiveTransition:
-	    pTrigger->CheckTrigger = SyncCheckTriggerPositiveTransition;
-	    break;
-        case XSyncNegativeTransition:
-	    pTrigger->CheckTrigger = SyncCheckTriggerNegativeTransition;
-	    break;
-        case XSyncPositiveComparison:
-	    pTrigger->CheckTrigger = SyncCheckTriggerPositiveComparison;
-	    break;
-        case XSyncNegativeComparison:
-	    pTrigger->CheckTrigger = SyncCheckTriggerNegativeComparison;
-	    break;
+	    if (pTrigger->test_type != XSyncPositiveTransition &&
+		pTrigger->test_type != XSyncNegativeTransition &&
+		pTrigger->test_type != XSyncPositiveComparison &&
+		pTrigger->test_type != XSyncNegativeComparison)
+	    {
+		client->errorValue = pTrigger->test_type;
+		return BadValue;
+	    }
+	    /* select appropriate CheckTrigger function */
+
+	    switch (pTrigger->test_type)
+	    {
+	    case XSyncPositiveTransition:
+		pTrigger->CheckTrigger = SyncCheckTriggerPositiveTransition;
+		break;
+	    case XSyncNegativeTransition:
+		pTrigger->CheckTrigger = SyncCheckTriggerNegativeTransition;
+		break;
+	    case XSyncPositiveComparison:
+		pTrigger->CheckTrigger = SyncCheckTriggerPositiveComparison;
+		break;
+	    case XSyncNegativeComparison:
+		pTrigger->CheckTrigger = SyncCheckTriggerNegativeComparison;
+		break;
+	    }
 	}
     }
 
@@ -394,7 +405,7 @@ SyncInitTrigger(ClientPtr client, SyncTrigger *pTrigger, XID syncObject,
     /*  we wait until we're sure there are no errors before registering
      *  a new counter on a trigger
      */
-    if (newcounter)
+    if (newSyncObject)
     {
 	if ((rc = SyncAddTriggerToSyncObject(pTrigger)) != Success)
 	    return rc;
@@ -641,14 +652,7 @@ SyncAwaitTriggerFired(SyncTrigger *pTrigger)
 	    continue;
 	}
 
-	if (SYNC_FENCE == pAwait->trigger.pSync->type)
-	{
-	    SyncFence *pFence = (SyncFence *) pAwait->trigger.pSync;
-
-	    if (pFence->triggered)
-		ppAwait[num_events++] = pAwait;
-	}
-	else if (SYNC_COUNTER == pAwait->trigger.pSync->type)
+	if (SYNC_COUNTER == pAwait->trigger.pSync->type)
 	{
 	    SyncCounter *pCounter = (SyncCounter *) pAwait->trigger.pSync;
 
@@ -687,10 +691,6 @@ SyncAwaitTriggerFired(SyncTrigger *pTrigger)
 	    {
 		ppAwait[num_events++] = pAwait;
 	    }
-	}
-	else
-	{
-	    FatalError("Invalid sync object type");
 	}
     }
     if (num_events)
@@ -1525,6 +1525,66 @@ ProcSyncDestroyCounter(ClientPtr client)
     return Success;
 }
 
+static SyncAwaitUnion*
+SyncAwaitPrologue(ClientPtr client, int items)
+{
+    SyncAwaitUnion *pAwaitUnion;
+
+    /*  all the memory for the entire await list is allocated
+     *  here in one chunk
+     */
+    pAwaitUnion = malloc((items+1) * sizeof(SyncAwaitUnion));
+    if (!pAwaitUnion)
+	return NULL;
+
+    /* first item is the header, remainder are real wait conditions */
+
+    pAwaitUnion->header.delete_id = FakeClientID(client->index);
+    if (!AddResource(pAwaitUnion->header.delete_id, RTAwait, pAwaitUnion))
+    {
+	free(pAwaitUnion);
+	return NULL;
+    }
+
+    pAwaitUnion->header.client = client;
+    pAwaitUnion->header.num_waitconditions = 0;
+
+    return pAwaitUnion;
+}
+
+static void
+SyncAwaitEpilogue(ClientPtr client, int items, SyncAwaitUnion *pAwaitUnion)
+{
+    SyncAwait *pAwait;
+    int i;
+
+    IgnoreClient(client);
+
+    /* see if any of the triggers are already true */
+
+    pAwait = &(pAwaitUnion+1)->await; /* skip over header */
+    for (i = 0; i < items; i++, pAwait++)
+    {
+	CARD64 value;
+
+	/*  don't have to worry about NULL counters because the request
+	 *  errors before we get here out if they occur
+	 */
+	switch (pAwait->trigger.pSync->type) {
+	case SYNC_COUNTER:
+	    value = ((SyncCounter *)pAwait->trigger.pSync)->value;
+	    break;
+	default:
+	    XSyncIntToValue(&value, 0);
+	}
+
+	if ((*pAwait->trigger.CheckTrigger)(&pAwait->trigger, value))
+	{
+	    (*pAwait->trigger.TriggerFired)(&pAwait->trigger);
+	    break; /* once is enough */
+	}
+    }
+}
 
 /*
  * ** Await
@@ -1556,28 +1616,12 @@ ProcSyncAwait(ClientPtr client)
 	return BadValue;
     }
 
-    pProtocolWaitConds = (xSyncWaitCondition *) & stuff[1];
-
-    /*  all the memory for the entire await list is allocated
-     *  here in one chunk
-     */
-    pAwaitUnion = malloc((items+1) * sizeof(SyncAwaitUnion));
-    if (!pAwaitUnion)
+    if (!(pAwaitUnion = SyncAwaitPrologue(client, items)))
 	return BadAlloc;
-
-    /* first item is the header, remainder are real wait conditions */
-
-    pAwaitUnion->header.delete_id = FakeClientID(client->index);
-    if (!AddResource(pAwaitUnion->header.delete_id, RTAwait, pAwaitUnion))
-    {
-	free(pAwaitUnion);
-	return BadAlloc;
-    }
 
     /* don't need to do any more memory allocation for this request! */
 
-    pAwaitUnion->header.client = client;
-    pAwaitUnion->header.num_waitconditions = 0;
+    pProtocolWaitConds = (xSyncWaitCondition *) & stuff[1];
 
     pAwait = &(pAwaitUnion+1)->await; /* skip over header */
     for (i = 0; i < items; i++, pProtocolWaitConds++, pAwait++)
@@ -1585,7 +1629,7 @@ ProcSyncAwait(ClientPtr client)
 	if (pProtocolWaitConds->counter == None) /* XXX protocol change */
 	{
 	    /*  this should take care of removing any triggers created by
-	     *  this request that have already been registered on counters
+	     *  this request that have already been registered on sync objects
 	     */
 	    FreeResource(pAwaitUnion->header.delete_id, RT_NONE);
 	    client->errorValue = pProtocolWaitConds->counter;
@@ -1606,7 +1650,7 @@ ProcSyncAwait(ClientPtr client)
 	if (status != Success)
 	{
 	    /*  this should take care of removing any triggers created by
-	     *  this request that have already been registered on counters
+	     *  this request that have already been registered on sync objects
 	     */
 	    FreeResource(pAwaitUnion->header.delete_id, RT_NONE);
 	    return status;
@@ -1621,32 +1665,8 @@ ProcSyncAwait(ClientPtr client)
 	pAwaitUnion->header.num_waitconditions++;
     }
 
-    IgnoreClient(client);
+    SyncAwaitEpilogue(client, items, pAwaitUnion);
 
-    /* see if any of the triggers are already true */
-
-    pAwait = &(pAwaitUnion+1)->await; /* skip over header */
-    for (i = 0; i < items; i++, pAwait++)
-    {
-	CARD64 value;
-
-	/*  don't have to worry about NULL counters because the request
-	 *  errors before we get here out if they occur
-	 */
-	switch (pAwait->trigger.pSync->type) {
-	case SYNC_COUNTER:
-	    value = ((SyncCounter *)pAwait->trigger.pSync)->value;
-	    break;
-	default:
-	    XSyncIntToValue(&value, 0);
-	}
-
-	if ((*pAwait->trigger.CheckTrigger)(&pAwait->trigger, value))
-	{
-	    (*pAwait->trigger.TriggerFired)(&pAwait->trigger);
-	    break; /* once is enough */
-	}
-    }
     return Success;
 }
 
@@ -1930,6 +1950,16 @@ static int
 FreeFence(void *obj, XID id)
 {
     SyncFence *pFence = (SyncFence *) obj;
+    SyncTriggerList *ptl, *pNext;
+
+    pFence->sync.beingDestroyed = TRUE;
+    /* tell all the counter's triggers that the counter has been destroyed */
+    for (ptl = pFence->sync.pTriglist; ptl; ptl = pNext)
+    {
+	(*ptl->pTrigger->CounterDestroyed)(ptl->pTrigger);
+	pNext = ptl->next;
+	xfree(ptl); /* destroy the trigger list as we go */
+    }
 
     xfree(pFence);
 
@@ -1952,6 +1982,16 @@ ProcSyncTriggerFence(ClientPtr client)
 
     pFence->triggered = TRUE;
 
+    XSyncIntToValue(&unused, 0L);
+
+    /* run through triggers to see if any fired */
+    for (ptl = pFence->sync.pTriglist; ptl; ptl = pNext)
+    {
+	pNext = ptl->next;
+	if ((*ptl->pTrigger->CheckTrigger)(ptl->pTrigger, unused))
+	    (*ptl->pTrigger->TriggerFired)(ptl->pTrigger);
+    }
+
     return client->noClientException;
 }
 
@@ -1960,6 +2000,8 @@ ProcSyncResetFence(ClientPtr client)
 {
     REQUEST(xSyncDestroyFenceReq);
     SyncFence *pFence;
+    SyncTriggerList *ptl, *pNext;
+    CARD64 unused;
     int rc;
 
     REQUEST_SIZE_MATCH(xSyncDestroyFenceReq);
@@ -2024,6 +2066,89 @@ ProcSyncQueryFence(ClientPtr client)
     return client->noClientException;
 }
 
+static int
+ProcSyncAwaitFence(ClientPtr client)
+{
+    REQUEST(xSyncAwaitFenceReq);
+    SyncAwaitUnion *pAwaitUnion;
+    SyncAwait *pAwait;
+    /* Use CARD32 rather than XSyncFence because XIDs are hard-coded to
+     * CARD32 in protocol definitions */
+    CARD32 *pProtocolFences;
+    int status;
+    int len;
+    int items;
+    int i;
+
+    REQUEST_AT_LEAST_SIZE(xSyncAwaitFenceReq);
+
+    len = client->req_len << 2;
+    len -= sz_xSyncAwaitFenceReq;
+    items = len / sizeof(CARD32);
+
+    if (items * sizeof(CARD32) != len)
+    {
+	return BadLength;
+    }
+    if (items == 0)
+    {
+	client->errorValue = items; /* XXX protocol change */
+	return BadValue;
+    }
+
+    if (!(pAwaitUnion = SyncAwaitPrologue(client, items)))
+	return BadAlloc;
+
+    /* don't need to do any more memory allocation for this request! */
+
+    pProtocolFences = (CARD32 *) & stuff[1];
+
+    pAwait = &(pAwaitUnion+1)->await; /* skip over header */
+    for (i = 0; i < items; i++, pProtocolFences++, pAwait++)
+    {
+	if (*pProtocolFences == None) /* XXX protocol change */
+	{
+	    /*  this should take care of removing any triggers created by
+	     *  this request that have already been registered on sync objects
+	     */
+	    FreeResource(pAwaitUnion->header.delete_id, RT_NONE);
+	    client->errorValue = *pProtocolFences;
+	    return SyncErrorBase + XSyncBadCounter;
+	}
+
+	pAwait->trigger.pSync = NULL;
+	/* Provide acceptable values for these unused fields to
+	 * satisfy SyncInitTrigger's validation logic
+	 */
+	pAwait->trigger.value_type = XSyncAbsolute;
+	XSyncIntToValue(&pAwait->trigger.wait_value, 0);
+	pAwait->trigger.test_type = 0;
+
+	status = SyncInitTrigger(client, &pAwait->trigger,
+				 *pProtocolFences, RTFence,
+				 XSyncCAAllTrigger);
+	if (status != Success)
+	{
+	    /*  this should take care of removing any triggers created by
+	     *  this request that have already been registered on sync objects
+	     */
+	    FreeResource(pAwaitUnion->header.delete_id, RT_NONE);
+	    return status;
+	}
+	/* this is not a mistake -- same function works for both cases */
+	pAwait->trigger.TriggerFired = SyncAwaitTriggerFired;
+	pAwait->trigger.CounterDestroyed = SyncAwaitTriggerFired;
+	/* event_threshold is unused for fence syncs */
+	XSyncIntToValue(&pAwait->event_threshold, 0);
+	pAwait->pHeader = &pAwaitUnion->header;
+	pAwaitUnion->header.num_waitconditions++;
+    }
+
+    SyncAwaitEpilogue(client, items, pAwaitUnion);
+
+    return client->noClientException;
+}
+
 /*
  * ** Given an extension request, call the appropriate request procedure
  */
@@ -2072,6 +2197,8 @@ ProcSyncDispatch(ClientPtr client)
 	return ProcSyncDestroyFence(client);
       case X_SyncQueryFence:
 	return ProcSyncQueryFence(client);
+      case X_SyncAwaitFence:
+	return ProcSyncAwaitFence(client);
       default:
 	return BadRequest;
     }
@@ -2337,6 +2464,19 @@ SProcSyncQueryFence(ClientPtr client)
 }
 
 static int
+SProcSyncAwaitFence(ClientPtr client)
+{
+    REQUEST(xSyncAwaitFenceReq);
+    char   n;
+
+    swaps(&stuff->length, n);
+    REQUEST_AT_LEAST_SIZE(xSyncAwaitFenceReq);
+    SwapRestL(stuff);
+
+    return ProcSyncAwaitFence(client);
+}
+
+static int
 SProcSyncDispatch(ClientPtr client)
 {
     REQUEST(xReq);
@@ -2381,6 +2521,8 @@ SProcSyncDispatch(ClientPtr client)
 	return SProcSyncDestroyFence(client);
       case X_SyncQueryFence:
 	return SProcSyncQueryFence(client);
+      case X_SyncAwaitFence:
+	return SProcSyncAwaitFence(client);
       default:
 	return BadRequest;
     }
