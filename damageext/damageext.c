@@ -25,6 +25,8 @@
 #endif
 
 #include "damageextint.h"
+#include "syncsrv.h"
+#include "misync.h"
 #include "protocol-versions.h"
 
 static unsigned char	DamageReqCode;
@@ -241,18 +243,11 @@ ProcDamageDestroy (ClientPtr client)
 }
 
 static int
-ProcDamageSubtract (ClientPtr client)
+DamageSubtractCommon (ClientPtr client,
+		      DamageExtPtr pDamageExt,
+		      RegionPtr pRepair,
+		      RegionPtr pParts)
 {
-    REQUEST(xDamageSubtractReq);
-    DamageExtPtr    pDamageExt;
-    RegionPtr	    pRepair;
-    RegionPtr	    pParts;
-
-    REQUEST_SIZE_MATCH(xDamageSubtractReq);
-    VERIFY_DAMAGEEXT(pDamageExt, stuff->damage, client, DixWriteAccess);
-    VERIFY_REGION_OR_NONE(pRepair, stuff->repair, client, DixWriteAccess);
-    VERIFY_REGION_OR_NONE(pParts, stuff->parts, client, DixWriteAccess);
-
     if (pDamageExt->level != DamageReportRawRegion)
     {
 	DamagePtr   pDamage = pDamageExt->pDamage;
@@ -271,6 +266,45 @@ ProcDamageSubtract (ClientPtr client)
 	}
     }
     return Success;
+}
+
+static int
+ProcDamageSubtract (ClientPtr client)
+{
+    REQUEST(xDamageSubtractReq);
+    DamageExtPtr    pDamageExt;
+    RegionPtr	    pRepair;
+    RegionPtr	    pParts;
+
+    REQUEST_SIZE_MATCH(xDamageSubtractReq);
+    VERIFY_DAMAGEEXT(pDamageExt, stuff->damage, client, DixWriteAccess);
+    VERIFY_REGION_OR_NONE(pRepair, stuff->repair, client, DixWriteAccess);
+    VERIFY_REGION_OR_NONE(pParts, stuff->parts, client, DixWriteAccess);
+
+    return DamageSubtractCommon (client, pDamageExt, pRepair, pParts);
+}
+
+static int
+ProcDamageSubtractAndTrigger (ClientPtr client)
+{
+    REQUEST(xDamageSubtractAndTriggerReq);
+    DamageExtPtr    pDamageExt;
+    RegionPtr	    pRepair;
+    RegionPtr	    pParts;
+    SyncFence*	    pFence;
+
+    REQUEST_SIZE_MATCH(xDamageSubtractAndTriggerReq);
+    VERIFY_DAMAGEEXT(pDamageExt, stuff->damage, client, DixWriteAccess);
+    VERIFY_REGION_OR_NONE(pRepair, stuff->repair, client, DixWriteAccess);
+    VERIFY_REGION_OR_NONE(pParts, stuff->parts, client, DixWriteAccess);
+    VERIFY_SYNC_FENCE_OR_NONE(pFence, stuff->finishedFence, client,
+			      DixWriteAccess);
+
+    if (pFence) {
+	miSyncTriggerFence(pFence);
+    }
+
+    return DamageSubtractCommon (client, pDamageExt, pRepair, pParts);
 }
 
 static int
@@ -301,7 +335,7 @@ ProcDamageAdd (ClientPtr client)
 /* Major version controls available requests */
 static const int version_requests[] = {
     X_DamageQueryVersion,	/* before client sends QueryVersion */
-    X_DamageAdd,		/* Version 1 */
+    X_DamageSubtractAndTrigger,	/* Version 1 */
 };
 
 #define NUM_VERSION_REQUESTS	(sizeof (version_requests) / sizeof (version_requests[0]))
@@ -314,6 +348,8 @@ static int (*ProcDamageVector[XDamageNumberRequests])(ClientPtr) = {
     ProcDamageSubtract,
 /*************** Version 1.1 ****************/
     ProcDamageAdd,
+/*************** Version 1.2 ****************/
+    ProcDamageSubtractAndTrigger,
 };
 
 

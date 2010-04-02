@@ -1,4 +1,4 @@
-SUBDIRS = damage shadow
+SUBDIRS = X damage shadow
 if COMPOSITE
 SUBDIRS += cw
 endif
@@ -8,4 +8,4 @@ endif
 if XWIN_MULTIWINDOWEXTWM
 SUBDIRS += rootless
 endif
-DIST_SUBDIRS = damage shadow cw rootless
+DIST_SUBDIRS = X damage shadow cw rootless
