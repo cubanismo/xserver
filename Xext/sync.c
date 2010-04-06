@@ -59,7 +59,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/Xmd.h>
-#include "misc.h"
+#include "scrnintstr.h"
 #include "os.h"
 #include "extnsionst.h"
 #include "dixstruct.h"
@@ -292,8 +292,10 @@ SyncCheckTriggerNegativeTransition(SyncTrigger *pTrigger, CARD64 oldval)
 static Bool
 SyncCheckTriggerFence(SyncTrigger *pTrigger, CARD64 unused)
 {
-    return (pTrigger->pSync == NULL ||
-	    ((SyncFence *)pTrigger->pSync)->triggered);
+    SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+
+    return (pFence == NULL ||
+	    pFence->funcs.CheckTriggered(pFence));
 }
 
 static int
@@ -1930,6 +1932,7 @@ static int
 ProcSyncCreateFence(ClientPtr client)
 {
     REQUEST(xSyncCreateFenceReq);
+    ScreenPtr pScreen = screenInfo.screens[0];
     SyncFence *pFence;
 
     REQUEST_SIZE_MATCH(xSyncCreateFenceReq);
@@ -1941,7 +1944,7 @@ ProcSyncCreateFence(ClientPtr client)
 					   SYNC_FENCE)))
 	return BadAlloc;
 
-    pFence->triggered = stuff->initially_triggered;
+    miSyncInitFence(pScreen, pFence, stuff->initially_triggered);
 
     return client->noClientException;
 }
@@ -1960,6 +1963,8 @@ FreeFence(void *obj, XID id)
 	pNext = ptl->next;
 	xfree(ptl); /* destroy the trigger list as we go */
     }
+
+    miSyncDestroyFence(pFence);
 
     xfree(pFence);
 
@@ -2015,7 +2020,7 @@ ProcSyncResetFence(ClientPtr client)
     if (rc != Success)
 	return (rc == BadValue) ? SyncErrorBase + XSyncBadFence : rc;
 
-    pFence->triggered = FALSE;
+    pFence->funcs.Reset(pFence);
 
     return client->noClientException;
 }
@@ -2057,7 +2062,7 @@ ProcSyncQueryFence(ClientPtr client)
     rep.length = 0;
     rep.sequenceNumber = client->sequence;
 
-    rep.triggered = pFence->triggered;
+    rep.triggered = pFence->funcs.CheckTriggered(pFence);
 
     if (client->swapped)
     {
@@ -2587,6 +2592,10 @@ void
 SyncExtensionInit(void)
 {
     ExtensionEntry *extEntry;
+    int 	    s;
+
+    for (s = 0; s < screenInfo.numScreens; s++)
+	miSyncSetup(screenInfo.screens[s]);
 
     if (RTCounter == 0)
     {

@@ -51,7 +51,10 @@ typedef struct _SyncCounter {
 
 struct _SyncFence {
     SyncObject		sync;		/* Common sync object data */
+    ScreenPtr		pScreen;	/* Screen of this fence object */
+    SyncFenceFuncsRec	funcs;		/* Funcs for performing ops on fence */
     BOOL		triggered;	/* counter value */
+    PrivateRec		*devPrivates;	/* driver-specific per-fence data */
 };
 
 typedef struct _SyncTrigger {
