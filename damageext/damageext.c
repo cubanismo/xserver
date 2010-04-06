@@ -300,6 +300,11 @@ ProcDamageSubtractAndTrigger (ClientPtr client)
     VERIFY_SYNC_FENCE_OR_NONE(pFence, stuff->finishedFence, client,
 			      DixWriteAccess);
 
+    if (pFence && pFence->pScreen != pDamageExt->pDrawable->pScreen) {
+	client->errorValue = stuff->finishedFence;
+	return BadMatch;
+    }
+
     if (pFence) {
 	miSyncTriggerFence(pFence);
     }

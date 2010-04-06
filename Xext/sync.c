@@ -1932,12 +1932,19 @@ static int
 ProcSyncCreateFence(ClientPtr client)
 {
     REQUEST(xSyncCreateFenceReq);
-    ScreenPtr pScreen = screenInfo.screens[0];
+    ScreenPtr pScreen;
     SyncFence *pFence;
 
     REQUEST_SIZE_MATCH(xSyncCreateFenceReq);
 
+    if (stuff->screen < 0 || stuff->screen >= screenInfo.numScreens) {
+	client->errorValue = stuff->screen;
+	return BadValue;
+    }
+
     LEGAL_NEW_RESOURCE(stuff->fid, client);
+
+    pScreen = screenInfo.screens[stuff->screen];
 
     if (!(pFence = (SyncFence *)SyncCreate(client,
 					   stuff->fid,
