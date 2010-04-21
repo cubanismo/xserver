@@ -1951,6 +1951,8 @@ ProcSyncCreateFence(ClientPtr client)
 					   SYNC_FENCE)))
 	return BadAlloc;
 
+    pFence->devPrivates = NULL;
+
     miSyncInitFence(pScreen, pFence, stuff->initially_triggered);
 
     return client->noClientException;
@@ -1973,6 +1975,7 @@ FreeFence(void *obj, XID id)
 
     miSyncDestroyFence(pFence);
 
+    dixFreePrivates(pFence->devPrivates);
     xfree(pFence);
 
     return Success;
