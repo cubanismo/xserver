@@ -5,9 +5,10 @@ AM_CFLAGS = $(DIX_CFLAGS)
 INCLUDES = 
 
 if XORG
-sdk_HEADERS = misync.c misync.h
+sdk_HEADERS = misync.h misyncstr.h
 endif
 
 libXext_la_SOURCES =	\
 	misync.c	\
-	misync.h
+	misync.h	\
+	misyncstr.h
