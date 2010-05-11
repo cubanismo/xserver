@@ -25,8 +25,8 @@
 #endif
 
 #include "damageextint.h"
-#include "syncsrv.h"
-#include "misync.h"
+#include "syncsdk.h"
+#include "misyncstr.h"
 #include "protocol-versions.h"
 
 static unsigned char	DamageReqCode;
