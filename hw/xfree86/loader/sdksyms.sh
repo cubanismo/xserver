@@ -42,6 +42,9 @@ cat > sdksyms.c << EOF
 #include "damage.h"
 #include "damagestr.h"
 
+/* miext/X/Makefile.am */
+#include "misync.h"
+#include "misyncstr.h"
 
 /* Xext/Makefile.am -- half is module, half is builtin */
 /*
@@ -51,6 +54,7 @@ cat > sdksyms.c << EOF
 #include "geext.h"
 #include "geint.h"
 #include "shmint.h"
+#include "syncsdk.h"
 #if XINERAMA
 # include "panoramiXsrv.h"
 # include "panoramiX.h"

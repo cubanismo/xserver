@@ -67,6 +67,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "opaque.h"
 #include <X11/extensions/syncproto.h>
 #include "syncsrv.h"
+#include "syncsdk.h"
 
 #include <stdio.h>
 #if !defined(WIN32)
