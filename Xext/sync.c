@@ -301,6 +301,7 @@ static Bool
 SyncCheckTriggerFence(SyncTrigger *pTrigger, CARD64 unused)
 {
     SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+    (void)unused;
 
     return (pFence == NULL ||
 	    pFence->funcs.CheckTriggered(pFence));
@@ -2027,8 +2028,6 @@ ProcSyncResetFence(ClientPtr client)
 {
     REQUEST(xSyncDestroyFenceReq);
     SyncFence *pFence;
-    SyncTriggerList *ptl, *pNext;
-    CARD64 unused;
     int rc;
 
     REQUEST_SIZE_MATCH(xSyncDestroyFenceReq);
