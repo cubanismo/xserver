@@ -1979,13 +1979,13 @@ FreeFence(void *obj, XID id)
     {
 	(*ptl->pTrigger->CounterDestroyed)(ptl->pTrigger);
 	pNext = ptl->next;
-	xfree(ptl); /* destroy the trigger list as we go */
+	free(ptl); /* destroy the trigger list as we go */
     }
 
     miSyncDestroyFence(pFence);
 
     dixFreePrivates(pFence->devPrivates);
-    xfree(pFence);
+    free(pFence);
 
     return Success;
 }

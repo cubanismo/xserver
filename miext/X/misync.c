@@ -149,7 +149,7 @@ SyncCloseScreen (int i, ScreenPtr pScreen)
     SyncScreenPrivPtr pScreenPriv = SYNC_SCREEN_PRIV(pScreen);
 
     pScreen->CloseScreen = pScreenPriv->CloseScreen;
-    xfree(pScreenPriv);
+    free(pScreenPriv);
 
     return (*pScreen->CloseScreen) (i, pScreen);
 }
@@ -167,7 +167,7 @@ miSyncSetup(ScreenPtr pScreen)
     if (pScreenPriv)
 	return TRUE;
 
-    if (!(pScreenPriv = xalloc (sizeof(SyncScreenPrivRec))))
+    if (!(pScreenPriv = malloc (sizeof(SyncScreenPrivRec))))
 	return FALSE;
 
     pScreenPriv->funcs = miSyncScreenFuncs;
