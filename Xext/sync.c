@@ -187,6 +187,9 @@ SyncDeleteTriggerFromSyncObject(SyncTrigger *pTrigger)
 
 	if (IsSystemCounter(pCounter))
 	    SyncComputeBracketValues(pCounter);
+    } else if (SYNC_FENCE == pTrigger->pSync->type) {
+	SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+	pFence->funcs.DeleteTrigger(pTrigger);
     }
 }
 
@@ -220,6 +223,9 @@ SyncAddTriggerToSyncObject(SyncTrigger *pTrigger)
 
 	if (IsSystemCounter(pCounter))
 	    SyncComputeBracketValues(pCounter);
+    } else if (SYNC_FENCE == pTrigger->pSync->type) {
+	SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+	pFence->funcs.AddTrigger(pTrigger);
     }
 
     return Success;

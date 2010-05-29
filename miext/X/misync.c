@@ -55,22 +55,38 @@ void miSyncScreenDestroyFence(ScreenPtr pScreen, SyncFence* pFence)
 }
 
 /* Default implementations of the per-object functions */
-void
+static void
 miSyncFenceSetTriggered(SyncFence* pFence)
 {
     pFence->triggered = TRUE;
 }
 
-void
+static void
 miSyncFenceReset(SyncFence* pFence)
 {
     pFence->triggered = FALSE;
 }
 
-Bool
+static Bool
 miSyncFenceCheckTriggered(SyncFence* pFence)
 {
     return pFence->triggered;
+}
+
+static void
+miSyncFenceAddTrigger(SyncTrigger* pTrigger)
+{
+    (void)pTrigger;
+
+    return;
+}
+
+static void
+miSyncFenceDeleteTrigger(SyncTrigger* pTrigger)
+{
+    (void)pTrigger;
+
+    return;
 }
 
 /* Machine independent portion of the fence sync object implementation */
@@ -81,7 +97,9 @@ miSyncInitFence(ScreenPtr pScreen, SyncFence* pFence, Bool initially_triggered)
     static const SyncFenceFuncsRec miSyncFenceFuncs = {
 	&miSyncFenceSetTriggered,
 	&miSyncFenceReset,
-	&miSyncFenceCheckTriggered
+	&miSyncFenceCheckTriggered,
+	&miSyncFenceAddTrigger,
+	&miSyncFenceDeleteTrigger
     };
 
     pFence->pScreen = pScreen;

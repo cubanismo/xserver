@@ -57,7 +57,7 @@ struct _SyncFence {
     PrivateRec		*devPrivates;	/* driver-specific per-fence data */
 };
 
-typedef struct _SyncTrigger {
+struct _SyncTrigger {
     SyncObject *pSync;
     CARD64	wait_value;	/* wait value */
     unsigned int value_type;     /* Absolute or Relative */
@@ -73,7 +73,7 @@ typedef struct _SyncTrigger {
     void	(*CounterDestroyed)(
 				struct _SyncTrigger * /*pTrigger*/
 				    );
-} SyncTrigger;
+};
 
 typedef struct _SyncTriggerList {
     SyncTrigger *pTrigger;

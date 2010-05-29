@@ -27,6 +27,7 @@
 #define _MISYNC_H_
 
 typedef struct _SyncFence SyncFence;
+typedef struct _SyncTrigger SyncTrigger;
 
 typedef void (*SyncScreenCreateFenceFunc) (ScreenPtr pScreen,
 					   SyncFence* pFence,
@@ -48,19 +49,16 @@ miSyncScreenDestroyFence(ScreenPtr pScreen, SyncFence* pFence);
 typedef void (*SyncFenceSetTriggeredFunc) (SyncFence* pFence);
 typedef void (*SyncFenceResetFunc) (SyncFence* pFence);
 typedef Bool (*SyncFenceCheckTriggeredFunc) (SyncFence* pFence);
+typedef void (*SyncFenceAddTriggerFunc) (SyncTrigger* pTrigger);
+typedef void (*SyncFenceDeleteTriggerFunc) (SyncTrigger* pTrigger);
 
 typedef struct _syncFenceFuncs {
     SyncFenceSetTriggeredFunc	SetTriggered;
     SyncFenceResetFunc		Reset;
     SyncFenceCheckTriggeredFunc	CheckTriggered;
+    SyncFenceAddTriggerFunc	AddTrigger;
+    SyncFenceDeleteTriggerFunc	DeleteTrigger;
 } SyncFenceFuncsRec, *SyncFenceFuncsPtr;
-
-extern _X_EXPORT void
-miSyncFenceSetTriggered(SyncFence* pFence);
-extern _X_EXPORT void
-miSyncFenceReset(SyncFence* pFence);
-extern _X_EXPORT Bool
-miSyncFenceCheckTriggered(SyncFence* pFence);
 
 extern _X_EXPORT void
 miSyncInitFence(ScreenPtr pScreen, SyncFence* pFence, Bool initially_triggered);
