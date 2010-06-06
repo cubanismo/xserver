@@ -2007,11 +2007,11 @@ int SyncVerifyFence(SyncFence **ppSyncFence, XID fid,
 static int
 ProcSyncTriggerFence(ClientPtr client)
 {
-    REQUEST(xSyncDestroyFenceReq);
+    REQUEST(xSyncTriggerFenceReq);
     SyncFence *pFence;
     int rc;
 
-    REQUEST_SIZE_MATCH(xSyncDestroyFenceReq);
+    REQUEST_SIZE_MATCH(xSyncTriggerFenceReq);
 
     rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid, RTFence,
 				 client, DixWriteAccess);
@@ -2026,11 +2026,11 @@ ProcSyncTriggerFence(ClientPtr client)
 static int
 ProcSyncResetFence(ClientPtr client)
 {
-    REQUEST(xSyncDestroyFenceReq);
+    REQUEST(xSyncResetFenceReq);
     SyncFence *pFence;
     int rc;
 
-    REQUEST_SIZE_MATCH(xSyncDestroyFenceReq);
+    REQUEST_SIZE_MATCH(xSyncResetFenceReq);
 
     rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid, RTFence,
 				 client, DixWriteAccess);
