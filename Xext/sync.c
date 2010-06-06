@@ -63,6 +63,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "os.h"
 #include "extnsionst.h"
 #include "dixstruct.h"
+#include "pixmapstr.h"
 #include "resource.h"
 #include "opaque.h"
 #include <X11/extensions/syncproto.h>
@@ -1941,19 +1942,17 @@ static int
 ProcSyncCreateFence(ClientPtr client)
 {
     REQUEST(xSyncCreateFenceReq);
-    ScreenPtr pScreen;
+    DrawablePtr pDraw;
     SyncFence *pFence;
+    int rc;
 
     REQUEST_SIZE_MATCH(xSyncCreateFenceReq);
 
-    if (stuff->screen < 0 || stuff->screen >= screenInfo.numScreens) {
-	client->errorValue = stuff->screen;
-	return BadValue;
-    }
+    rc = dixLookupDrawable(&pDraw, stuff->d, client, M_ANY, DixGetAttrAccess);
+    if (rc != Success)
+	return rc;
 
     LEGAL_NEW_RESOURCE(stuff->fid, client);
-
-    pScreen = screenInfo.screens[stuff->screen];
 
     if (!(pFence = (SyncFence *)SyncCreate(client,
 					   stuff->fid,
@@ -1962,7 +1961,7 @@ ProcSyncCreateFence(ClientPtr client)
 
     pFence->devPrivates = NULL;
 
-    miSyncInitFence(pScreen, pFence, stuff->initially_triggered);
+    miSyncInitFence(pDraw->pScreen, pFence, stuff->initially_triggered);
 
     return client->noClientException;
 }
