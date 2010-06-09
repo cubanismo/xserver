@@ -1983,7 +1983,7 @@ FreeFence(void *obj, XID id)
 
     miSyncDestroyFence(pFence);
 
-    dixFreePrivates(pFence->devPrivates);
+    dixFreePrivates(pFence->devPrivates, PRIVATE_SYNC_FENCE);
     free(pFence);
 
     return Success;
