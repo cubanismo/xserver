@@ -923,17 +923,17 @@ SyncCreate(ClientPtr client, XID id, unsigned char type)
     switch (type) {
     case SYNC_COUNTER:
 	resType = RTCounter;
-	syncSize = sizeof(SyncCounter);
+	pSync = malloc(sizeof(SyncCounter));
 	break;
     case SYNC_FENCE:
 	resType = RTFence;
-	syncSize = sizeof(SyncFence);
+	pSync = dixAllocateObjectWithPrivates(SyncFence, PRIVATE_SYNC_FENCE);
 	break;
     default:
 	return NULL;
     }
 
-    if (!(pSync = (SyncObject *)malloc(syncSize)))
+    if (!pSync)
 	return NULL;
 
     if (!AddResource(id, resType, (pointer) pSync))
@@ -1983,8 +1983,7 @@ FreeFence(void *obj, XID id)
 
     miSyncDestroyFence(pFence);
 
-    dixFreePrivates(pFence->devPrivates, PRIVATE_SYNC_FENCE);
-    free(pFence);
+    dixFreeObjectWithPrivates(pFence, PRIVATE_SYNC_FENCE);
 
     return Success;
 }
