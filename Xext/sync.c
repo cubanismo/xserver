@@ -1959,8 +1959,6 @@ ProcSyncCreateFence(ClientPtr client)
 					   SYNC_FENCE)))
 	return BadAlloc;
 
-    pFence->devPrivates = NULL;
-
     miSyncInitFence(pDraw->pScreen, pFence, stuff->initially_triggered);
 
     return client->noClientException;

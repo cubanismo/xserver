@@ -19,12 +19,16 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#ifdef HAVE_DIX_CONFIG_H
+#include <dix-config.h>
+#endif
+
 #include "scrnintstr.h"
 #include "misync.h"
 #include "misyncstr.h"
 
-static int syncScreenPrivateKeyIndex;
-static DevPrivateKey syncScreenPrivateKey = &syncScreenPrivateKeyIndex;
+static DevPrivateKeyRec syncScreenPrivateKeyRec;
+static DevPrivateKey syncScreenPrivateKey = &syncScreenPrivateKeyRec;
 
 #define SYNC_SCREEN_PRIV(pScreen) 				\
     (SyncScreenPrivPtr) dixLookupPrivate(&pScreen->devPrivates,	\
@@ -157,26 +161,27 @@ SyncCloseScreen (int i, ScreenPtr pScreen)
 Bool
 miSyncSetup(ScreenPtr pScreen)
 {
-    SyncScreenPrivPtr	pScreenPriv = SYNC_SCREEN_PRIV(pScreen);
+    SyncScreenPrivPtr	pScreenPriv;
 
     static const SyncScreenFuncsRec miSyncScreenFuncs = {
 	&miSyncScreenCreateFence,
 	&miSyncScreenDestroyFence
     };
 
-    if (pScreenPriv)
+    if (dixPrivateKeyRegistered(syncScreenPrivateKey))
 	return TRUE;
 
-    if (!(pScreenPriv = malloc (sizeof(SyncScreenPrivRec))))
+    if (!dixRegisterPrivateKey(syncScreenPrivateKey, PRIVATE_SCREEN,
+			       sizeof(SyncScreenPrivRec)))
 	return FALSE;
+
+    pScreenPriv = SYNC_SCREEN_PRIV(pScreen);
 
     pScreenPriv->funcs = miSyncScreenFuncs;
 
     /* Wrap CloseScreen to clean up */
     pScreenPriv->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = SyncCloseScreen;
-
-    dixSetPrivate(&pScreen->devPrivates, syncScreenPrivateKey, pScreenPriv);
 
     return TRUE;
 }
