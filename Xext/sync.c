@@ -236,7 +236,7 @@ SyncAddTriggerToSyncObject(SyncTrigger *pTrigger)
 /*  Below are five possible functions that can be plugged into
  *  pTrigger->CheckTrigger for counter sync objects, corresponding to
  *  the four possible test-types, and the one possible function that
- *  can be pugged into pTrigger->CheckTrigger for fence sync objects.
+ *  can be plugged into pTrigger->CheckTrigger for fence sync objects.
  *  These functions are called after the sync object's state changes
  *  but are also passed the old state so they can inspect both the old
  *  and new values.  (PositiveTransition and NegativeTransition need to
@@ -2032,6 +2032,10 @@ ProcSyncResetFence(ClientPtr client)
 				 client, DixWriteAccess);
     if (rc != Success)
 	return (rc == BadValue) ? SyncErrorBase + XSyncBadFence : rc;
+
+
+    if (pFence->funcs.CheckTriggered(pFence) != TRUE)
+	return BadMatch;
 
     pFence->funcs.Reset(pFence);
 

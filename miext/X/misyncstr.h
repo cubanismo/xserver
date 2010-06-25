@@ -53,7 +53,7 @@ struct _SyncFence {
     SyncObject		sync;		/* Common sync object data */
     ScreenPtr		pScreen;	/* Screen of this fence object */
     SyncFenceFuncsRec	funcs;		/* Funcs for performing ops on fence */
-    Bool		triggered;	/* counter value */
+    Bool		triggered;	/* fence state */
     PrivateRec		*devPrivates;	/* driver-specific per-fence data */
 };
 
