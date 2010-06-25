@@ -81,7 +81,7 @@ get_prop_string(LibHalContext *hal_ctx, const char *udi, const char *name)
     prop = libhal_device_get_property_string(hal_ctx, udi, name, NULL);
     LogMessageVerb(X_INFO, 10, "config/hal: getting %s on %s returned %s\n", name, udi, prop ? prop : "(null)");
     if (prop) {
-        ret = xstrdup(prop);
+        ret = strdup(prop);
         libhal_free_string(prop);
     }
     else {
@@ -129,6 +129,7 @@ static void
 device_added(LibHalContext *hal_ctx, const char *udi)
 {
     char *path = NULL, *driver = NULL, *name = NULL, *config_info = NULL;
+    char *hal_tags, *parent;
     InputOption *options = NULL, *tmpo = NULL;
     InputAttributes attrs = {0};
     DeviceIntPtr dev = NULL;
@@ -155,16 +156,18 @@ device_added(LibHalContext *hal_ctx, const char *udi)
         LogMessage(X_WARNING,"config/hal: no driver or path specified for %s\n", udi);
         goto unwind;
     }
-    attrs.device = xstrdup(path);
+    attrs.device = strdup(path);
 
     name = get_prop_string(hal_ctx, udi, "info.product");
     if (!name)
-        name = xstrdup("(unnamed)");
+        name = strdup("(unnamed)");
     else
-        attrs.product = xstrdup(name);
+        attrs.product = strdup(name);
 
     attrs.vendor = get_prop_string(hal_ctx, udi, "info.vendor");
-    attrs.tags = xstrtokenize(get_prop_string(hal_ctx, udi, "input.tags"), ",");
+    hal_tags = get_prop_string(hal_ctx, udi, "input.tags");
+    attrs.tags = xstrtokenize(hal_tags, ",");
+    free(hal_tags);
 
     if (libhal_device_query_capability(hal_ctx, udi, "input.keys", NULL))
         attrs.flags |= ATTR_KEYBOARD;
@@ -179,14 +182,37 @@ device_added(LibHalContext *hal_ctx, const char *udi)
     if (libhal_device_query_capability(hal_ctx, udi, "input.touchscreen", NULL))
         attrs.flags |= ATTR_TOUCHSCREEN;
 
+    parent = get_prop_string(hal_ctx, udi, "info.parent");
+    if (parent) {
+        int usb_vendor, usb_product;
+
+        attrs.pnp_id = get_prop_string(hal_ctx, parent, "pnp.id");
+
+        /* construct USB ID in lowercase - "0000:ffff" */
+        usb_vendor = libhal_device_get_property_int(hal_ctx, parent,
+                                                    "usb.vendor_id", NULL);
+        LogMessageVerb(X_INFO, 10,
+                       "config/hal: getting usb.vendor_id on %s "
+                       "returned %04x\n", parent, usb_vendor);
+        usb_product = libhal_device_get_property_int(hal_ctx, parent,
+                                                     "usb.product_id", NULL);
+        LogMessageVerb(X_INFO, 10,
+                       "config/hal: getting usb.product_id on %s "
+                       "returned %04x\n", parent, usb_product);
+        if (usb_vendor && usb_product)
+            attrs.usb_id = Xprintf("%04x:%04x", usb_vendor, usb_product);
+
+        free(parent);
+    }
+
     options = calloc(sizeof(*options), 1);
     if (!options){
         LogMessage(X_ERROR, "config/hal: couldn't allocate space for input options!\n");
         goto unwind;
     }
 
-    options->key = xstrdup("_source");
-    options->value = xstrdup("server/hal");
+    options->key = strdup("_source");
+    options->value = strdup("server/hal");
     if (!options->key || !options->value) {
         LogMessage(X_ERROR, "config/hal: couldn't allocate first key/value pair\n");
         goto unwind;
@@ -361,7 +387,7 @@ device_added(LibHalContext *hal_ctx, const char *udi)
 
     for (; dev; dev = dev->next){
         free(dev->config_info);
-        dev->config_info = xstrdup(config_info);
+        dev->config_info = strdup(config_info);
     }
 
 unwind:
@@ -381,6 +407,8 @@ unwind:
     free(attrs.product);
     free(attrs.vendor);
     free(attrs.device);
+    free(attrs.pnp_id);
+    free(attrs.usb_id);
     if (attrs.tags) {
         char **tag = attrs.tags;
         while (*tag) {
@@ -619,7 +647,7 @@ config_hal_init(void)
     }
 
     /* verbose message */
-    LogMessageVerb(X_INFO,7,"config/hal: initialized");
+    LogMessageVerb(X_INFO,7,"config/hal: initialized\n");
 
     return 1;
 }

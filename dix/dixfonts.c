@@ -1836,7 +1836,7 @@ SetDefaultFontPath(char *path)
     if (!start) {
 	temp_path = Xprintf("%s%sbuilt-ins", path, *path ? "," : "");
     } else {
-	temp_path = xstrdup(path);
+	temp_path = strdup(path);
     }
     if (!temp_path)
         return BadAlloc;
@@ -1924,9 +1924,7 @@ InitFonts (void)
 {
     patternCache = MakeFontPatternCache();
 
-    BuiltinRegisterFpeFunctions();
-    FontFileRegisterFpeFunctions();
-    fs_register_fpe_functions();
+    register_fpe_functions();
 }
 
 int
