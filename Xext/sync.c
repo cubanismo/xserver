@@ -1836,6 +1836,38 @@ ProcSyncDestroyFence(ClientPtr client)
     return client->noClientException;
 }
 
+static int
+ProcSyncQueryFence(ClientPtr client)
+{
+    REQUEST(xSyncQueryFenceReq);
+    xSyncQueryFenceReply rep;
+    SyncFence *pFence;
+    int rc;
+
+    REQUEST_SIZE_MATCH(xSyncQueryFenceReq);
+
+    rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid,
+				 RTFence, client, DixReadAccess);
+    if (rc != Success)
+	return rc;
+
+    rep.type = X_Reply;
+    rep.length = 0;
+    rep.sequenceNumber = client->sequence;
+
+    rep.triggered = pFence->triggered;
+
+    if (client->swapped)
+    {
+	char n;
+	swaps(&rep.sequenceNumber, n);
+	swapl(&rep.length, n);
+    }
+
+    WriteToClient(client, sizeof(xSyncQueryFenceReply), (char *) &rep);
+    return client->noClientException;
+}
+
 /*
  * ** Given an extension request, call the appropriate request procedure
  */
@@ -1882,6 +1914,8 @@ ProcSyncDispatch(ClientPtr client)
 	return ProcSyncResetFence(client);
       case X_SyncDestroyFence:
 	return ProcSyncDestroyFence(client);
+      case X_SyncQueryFence:
+	return ProcSyncQueryFence(client);
       default:
 	return BadRequest;
     }
@@ -2134,6 +2168,19 @@ SProcSyncDestroyFence(ClientPtr client)
 }
 
 static int
+SProcSyncQueryFence(ClientPtr client)
+{
+    REQUEST(xSyncQueryFenceReq);
+    char   n;
+
+    swaps(&stuff->length, n);
+    REQUEST_SIZE_MATCH (xSyncQueryFenceReq);
+    swapl(&stuff->fid, n);
+
+    return ProcSyncQueryFence(client);
+}
+
+static int
 SProcSyncDispatch(ClientPtr client)
 {
     REQUEST(xReq);
@@ -2176,6 +2223,8 @@ SProcSyncDispatch(ClientPtr client)
 	return SProcSyncResetFence(client);
       case X_SyncDestroyFence:
 	return SProcSyncDestroyFence(client);
+      case X_SyncQueryFence:
+	return SProcSyncQueryFence(client);
       default:
 	return BadRequest;
     }
