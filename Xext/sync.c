@@ -63,6 +63,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "os.h"
 #include "extnsionst.h"
 #include "dixstruct.h"
+#include "pixmapstr.h"
 #include "resource.h"
 #include "opaque.h"
 #include <X11/extensions/syncproto.h>
@@ -84,6 +85,7 @@ static RESTYPE  RTCounter = 0;
 static RESTYPE  RTAwait;
 static RESTYPE  RTAlarm;
 static RESTYPE  RTAlarmClient;
+static RESTYPE  RTFence;
 static int SyncNumSystemCounters = 0;
 static SyncCounter **SysCounterList = NULL;
 
@@ -1732,6 +1734,108 @@ ProcSyncDestroyAlarm(ClientPtr client)
     return Success;
 }
 
+static int
+ProcSyncCreateFence(ClientPtr client)
+{
+    REQUEST(xSyncCreateFenceReq);
+    DrawablePtr pDraw;
+    SyncFence *pFence;
+    int rc;
+
+    REQUEST_SIZE_MATCH(xSyncCreateFenceReq);
+
+    rc = dixLookupDrawable(&pDraw, stuff->d, client, M_ANY, DixGetAttrAccess);
+    if (rc != Success)
+	return rc;
+
+    LEGAL_NEW_RESOURCE(stuff->fid, client);
+
+    if (!(pFence = malloc(sizeof(SyncFence))))
+	return BadAlloc;
+
+    if (!AddResource(stuff->fid, RTFence, (pointer) pFence))
+    {
+	free(pFence);
+	return BadAlloc;
+    }
+
+    pFence->pScreen = pDraw->pScreen;
+    pFence->client = client;
+    pFence->id = stuff->fid;
+    pFence->triggered = stuff->initially_triggered;
+
+    return client->noClientException;
+}
+
+static int
+FreeFence(void *obj, XID id)
+{
+    SyncFence *pFence = (SyncFence *) obj;
+
+    free(pFence);
+
+    return Success;
+}
+
+static int
+ProcSyncTriggerFence(ClientPtr client)
+{
+    REQUEST(xSyncTriggerFenceReq);
+    SyncFence *pFence;
+    int rc;
+
+    REQUEST_SIZE_MATCH(xSyncTriggerFenceReq);
+
+    rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid, RTFence,
+				 client, DixWriteAccess);
+    if (rc != Success)
+	return rc;
+
+    pFence->triggered = TRUE;
+
+    return client->noClientException;
+}
+
+static int
+ProcSyncResetFence(ClientPtr client)
+{
+    REQUEST(xSyncResetFenceReq);
+    SyncFence *pFence;
+    int rc;
+
+    REQUEST_SIZE_MATCH(xSyncResetFenceReq);
+
+    rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid, RTFence,
+				 client, DixWriteAccess);
+    if (rc != Success)
+	return rc;
+
+    if (pFence->triggered != TRUE)
+	return BadMatch;
+
+    pFence->triggered = FALSE;
+
+    return client->noClientException;
+}
+
+static int
+ProcSyncDestroyFence(ClientPtr client)
+{
+    REQUEST(xSyncDestroyFenceReq);
+    SyncFence *pFence;
+    int rc;
+
+    REQUEST_SIZE_MATCH(xSyncDestroyFenceReq);
+
+    rc = dixLookupResourceByType((pointer *)&pFence, stuff->fid, RTFence,
+				 client, DixDestroyAccess);
+    if (rc != Success)
+	return rc;
+
+    FreeResource(stuff->fid, RT_NONE);
+    return client->noClientException;
+}
+
 /*
  * ** Given an extension request, call the appropriate request procedure
  */
@@ -1770,6 +1874,14 @@ ProcSyncDispatch(ClientPtr client)
 	return ProcSyncSetPriority(client);
       case X_SyncGetPriority:
 	return ProcSyncGetPriority(client);
+      case X_SyncCreateFence:
+	return ProcSyncCreateFence(client);
+      case X_SyncTriggerFence:
+	return ProcSyncTriggerFence(client);
+      case X_SyncResetFence:
+	return ProcSyncResetFence(client);
+      case X_SyncDestroyFence:
+	return ProcSyncDestroyFence(client);
       default:
 	return BadRequest;
     }
@@ -1969,6 +2081,57 @@ SProcSyncGetPriority(ClientPtr client)
     return ProcSyncGetPriority(client);
 }
 
+static int
+SProcSyncCreateFence(ClientPtr client)
+{
+    REQUEST(xSyncCreateFenceReq);
+    char n;
+
+    swaps(&stuff->length, n);
+    REQUEST_SIZE_MATCH (xSyncCreateFenceReq);
+    swapl(&stuff->fid, n);
+
+    return ProcSyncCreateFence(client);
+}
+
+static int
+SProcSyncTriggerFence(ClientPtr client)
+{
+    REQUEST(xSyncTriggerFenceReq);
+    char n;
+
+    swaps(&stuff->length, n);
+    REQUEST_SIZE_MATCH (xSyncTriggerFenceReq);
+    swapl(&stuff->fid, n);
+
+    return ProcSyncTriggerFence(client);
+}
+
+static int
+SProcSyncResetFence(ClientPtr client)
+{
+    REQUEST(xSyncResetFenceReq);
+    char n;
+
+    swaps(&stuff->length, n);
+    REQUEST_SIZE_MATCH (xSyncResetFenceReq);
+    swapl(&stuff->fid, n);
+
+    return ProcSyncResetFence(client);
+}
+
+static int
+SProcSyncDestroyFence(ClientPtr client)
+{
+    REQUEST(xSyncDestroyFenceReq);
+    char n;
+
+    swaps(&stuff->length, n);
+    REQUEST_SIZE_MATCH (xSyncDestroyFenceReq);
+    swapl(&stuff->fid, n);
+
+    return ProcSyncDestroyFence(client);
+}
 
 static int
 SProcSyncDispatch(ClientPtr client)
@@ -2005,6 +2168,14 @@ SProcSyncDispatch(ClientPtr client)
 	return SProcSyncSetPriority(client);
       case X_SyncGetPriority:
 	return SProcSyncGetPriority(client);
+      case X_SyncCreateFence:
+	return SProcSyncCreateFence(client);
+      case X_SyncTriggerFence:
+	return SProcSyncTriggerFence(client);
+      case X_SyncResetFence:
+	return SProcSyncResetFence(client);
+      case X_SyncDestroyFence:
+	return SProcSyncDestroyFence(client);
       default:
 	return BadRequest;
     }
@@ -2073,6 +2244,7 @@ SyncExtensionInit(void)
     }
     RTAlarm = CreateNewResourceType(FreeAlarm, "SyncAlarm");
     RTAwait = CreateNewResourceType(FreeAwait, "SyncAwait");
+    RTFence = CreateNewResourceType(FreeFence, "SyncFence");
     if (RTAwait)
 	RTAwait |= RC_NEVERRETAIN;
     RTAlarmClient = CreateNewResourceType(FreeAlarmClient, "SyncAlarmClient");
@@ -2099,6 +2271,7 @@ SyncExtensionInit(void)
 
     SetResourceTypeErrorValue(RTCounter, SyncErrorBase + XSyncBadCounter);
     SetResourceTypeErrorValue(RTAlarm, SyncErrorBase + XSyncBadAlarm);
+    SetResourceTypeErrorValue(RTFence, SyncErrorBase + XSyncBadFence);
 
     /*
      * Although SERVERTIME is implemented by the OS layer, we initialise it
