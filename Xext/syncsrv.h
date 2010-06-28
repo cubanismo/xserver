@@ -53,14 +53,29 @@ PERFORMANCE OF THIS SOFTWARE.
 
 #define CARD64 XSyncValue /* XXX temporary! need real 64 bit values for Alpha */
 
-typedef struct _SyncCounter {
+/* Sync object types */
+#define SYNC_COUNTER		0
+#define SYNC_FENCE		1
+
+typedef struct _SyncObject {
     ClientPtr		client;	/* Owning client. 0 for system counters */
-    XSyncCounter	id;		/* resource ID */
-    CARD64		value;		/* counter value */
     struct _SyncTriggerList *pTriglist;	/* list of triggers */
-    Bool		beingDestroyed; /* in process of going away */
+    XID			id;		/* resource ID */
+    unsigned char	type;		/* SYNC_* */
+    Bool		beingDestroyed;	/* in process of going away */
+} SyncObject;
+
+typedef struct _SyncCounter {
+    SyncObject		sync;		/* Common sync object data */
+    CARD64		value;		/* counter value */
     struct _SysCounterInfo *pSysCounterInfo; /* NULL if not a system counter */
 } SyncCounter;
+
+typedef struct _SyncFence {
+    SyncObject		sync;		/* Common sync object data */
+    ScreenPtr           pScreen;	/* Screen of this fence object */
+    Bool		triggered;	/* fence state */
+} SyncFence;
 
 /*
  * The System Counter interface
@@ -147,13 +162,6 @@ typedef union {
     SyncAwaitHeader header;
     SyncAwait	    await;
 } SyncAwaitUnion;
-
-typedef struct _SyncFence {
-    ClientPtr		client;		/* Owning client. */
-    XSyncFence		id;		/* resource ID */
-    ScreenPtr           pScreen;	/* Screen of this fence object */
-    Bool		triggered;	/* fence state */
-} SyncFence;
 
 extern pointer SyncCreateSystemCounter(
     char *	/* name */,
