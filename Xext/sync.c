@@ -59,7 +59,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include <X11/Xmd.h>
-#include "misc.h"
+#include "scrnintstr.h"
 #include "os.h"
 #include "extnsionst.h"
 #include "dixstruct.h"
@@ -145,6 +145,9 @@ SyncDeleteTriggerFromSyncObject(SyncTrigger *pTrigger)
 
 	if (IsSystemCounter(pCounter))
 	    SyncComputeBracketValues(pCounter);
+    } else if (SYNC_FENCE == pTrigger->pSync->type) {
+	SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+	pFence->funcs.DeleteTrigger(pTrigger);
     }
 }
 
@@ -178,6 +181,9 @@ SyncAddTriggerToSyncObject(SyncTrigger *pTrigger)
 
 	if (IsSystemCounter(pCounter))
 	    SyncComputeBracketValues(pCounter);
+    } else if (SYNC_FENCE == pTrigger->pSync->type) {
+	SyncFence* pFence = (SyncFence*) pTrigger->pSync;
+	pFence->funcs.AddTrigger(pTrigger);
     }
 
     return Success;
@@ -252,10 +258,11 @@ SyncCheckTriggerNegativeTransition(SyncTrigger *pTrigger, CARD64 oldval)
 static Bool
 SyncCheckTriggerFence(SyncTrigger *pTrigger, CARD64 unused)
 {
+    SyncFence* pFence = (SyncFence*) pTrigger->pSync;
     (void)unused;
 
-    return (pTrigger->pSync == NULL ||
-	    ((SyncFence *)pTrigger->pSync)->triggered);
+    return (pFence == NULL ||
+	    pFence->funcs.CheckTriggered(pFence));
 }
 
 static int
@@ -868,22 +875,22 @@ SyncCreate(ClientPtr client, XID id, unsigned char type)
 {
     SyncObject *pSync;
     RESTYPE resType;
-    unsigned long syncSize;
 
     switch (type) {
     case SYNC_COUNTER:
 	resType = RTCounter;
-	syncSize = sizeof(SyncCounter);
+	pSync = malloc(sizeof(SyncCounter));
 	break;
     case SYNC_FENCE:
 	resType = RTFence;
-	syncSize = sizeof(SyncFence);
+	pSync = (SyncObject *)dixAllocateObjectWithPrivates(SyncFence,
+							    PRIVATE_SYNC_FENCE);
 	break;
     default:
 	return NULL;
     }
 
-    if (!(pSync = (SyncObject *)malloc(syncSize)))
+    if (!pSync)
 	return NULL;
 
     if (!AddResource(id, resType, (pointer) pSync))
@@ -1909,8 +1916,7 @@ ProcSyncCreateFence(ClientPtr client)
 					   SYNC_FENCE)))
 	return BadAlloc;
 
-    pFence->pScreen = pDraw->pScreen;
-    pFence->triggered = stuff->initially_triggered;
+    miSyncInitFence(pDraw->pScreen, pFence, stuff->initially_triggered);
 
     return client->noClientException;
 }
@@ -1930,7 +1936,9 @@ FreeFence(void *obj, XID id)
 	free(ptl); /* destroy the trigger list as we go */
     }
 
-    free(pFence);
+    miSyncDestroyFence(pFence);
+
+    dixFreeObjectWithPrivates(pFence, PRIVATE_SYNC_FENCE);
 
     return Success;
 }
@@ -1980,10 +1988,10 @@ ProcSyncResetFence(ClientPtr client)
     if (rc != Success)
 	return rc;
 
-    if (pFence->triggered != TRUE)
+    if (pFence->funcs.CheckTriggered(pFence) != TRUE)
 	return BadMatch;
 
-    pFence->triggered = FALSE;
+    pFence->funcs.Reset(pFence);
 
     return client->noClientException;
 }
@@ -2025,7 +2033,7 @@ ProcSyncQueryFence(ClientPtr client)
     rep.length = 0;
     rep.sequenceNumber = client->sequence;
 
-    rep.triggered = pFence->triggered;
+    rep.triggered = pFence->funcs.CheckTriggered(pFence);
 
     if (client->swapped)
     {
@@ -2555,6 +2563,10 @@ void
 SyncExtensionInit(void)
 {
     ExtensionEntry *extEntry;
+    int 	    s;
+
+    for (s = 0; s < screenInfo.numScreens; s++)
+	miSyncSetup(screenInfo.screens[s]);
 
     if (RTCounter == 0)
     {
