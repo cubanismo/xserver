@@ -1935,13 +1935,23 @@ FreeFence(void *obj, XID id)
     return Success;
 }
 
+int SyncVerifyFence(SyncFence **ppSyncFence, XID fid,
+		    ClientPtr client, Mask mode)
+{
+    int rc = dixLookupResourceByType((pointer *)ppSyncFence, fid, RTFence,
+				     client, mode);
+
+    if (rc != Success)
+	client->errorValue = fid;
+
+    return rc;
+}
+
 static int
 ProcSyncTriggerFence(ClientPtr client)
 {
     REQUEST(xSyncTriggerFenceReq);
     SyncFence *pFence;
-    SyncTriggerList *ptl, *pNext;
-    CARD64 unused;
     int rc;
 
     REQUEST_SIZE_MATCH(xSyncTriggerFenceReq);
@@ -1951,17 +1961,7 @@ ProcSyncTriggerFence(ClientPtr client)
     if (rc != Success)
 	return rc;
 
-    pFence->triggered = TRUE;
-
-    XSyncIntToValue(&unused, 0L);
-
-    /* run through triggers to see if any fired */
-    for (ptl = pFence->sync.pTriglist; ptl; ptl = pNext)
-    {
-	pNext = ptl->next;
-	if ((*ptl->pTrigger->CheckTrigger)(ptl->pTrigger, unused))
-	    (*ptl->pTrigger->TriggerFired)(ptl->pTrigger);
-    }
+    miSyncTriggerFence(pFence);
 
     return client->noClientException;
 }
@@ -2547,7 +2547,6 @@ SyncResetProc(ExtensionEntry *extEntry)
     SysCounterList = NULL;
     RTCounter = 0;
 }
-
 
 /*
  * ** Initialise the extension.

@@ -51,31 +51,8 @@ PERFORMANCE OF THIS SOFTWARE.
 #ifndef _SYNCSRV_H_
 #define _SYNCSRV_H_
 
-#define CARD64 XSyncValue /* XXX temporary! need real 64 bit values for Alpha */
-
-/* Sync object types */
-#define SYNC_COUNTER		0
-#define SYNC_FENCE		1
-
-typedef struct _SyncObject {
-    ClientPtr		client;	/* Owning client. 0 for system counters */
-    struct _SyncTriggerList *pTriglist;	/* list of triggers */
-    XID			id;		/* resource ID */
-    unsigned char	type;		/* SYNC_* */
-    Bool		beingDestroyed;	/* in process of going away */
-} SyncObject;
-
-typedef struct _SyncCounter {
-    SyncObject		sync;		/* Common sync object data */
-    CARD64		value;		/* counter value */
-    struct _SysCounterInfo *pSysCounterInfo; /* NULL if not a system counter */
-} SyncCounter;
-
-typedef struct _SyncFence {
-    SyncObject		sync;		/* Common sync object data */
-    ScreenPtr           pScreen;	/* Screen of this fence object */
-    Bool		triggered;	/* fence state */
-} SyncFence;
+#include "misync.h"
+#include "misyncstr.h"
 
 /*
  * The System Counter interface
@@ -106,29 +83,6 @@ typedef struct _SysCounterInfo {
 } SysCounterInfo;
 
 
-
-typedef struct _SyncTrigger {
-    SyncObject *pSync;
-    CARD64	wait_value;	/* wait value */
-    unsigned int value_type;     /* Absolute or Relative */
-    unsigned int test_type;	/* transition or Comparision type */
-    CARD64	test_value;	/* trigger event threshold value */
-    Bool	(*CheckTrigger)(
-				struct _SyncTrigger * /*pTrigger*/,
-				CARD64 /*newval*/
-				);
-    void	(*TriggerFired)(
-				struct _SyncTrigger * /*pTrigger*/
-				);
-    void	(*CounterDestroyed)(
-				struct _SyncTrigger * /*pTrigger*/
-				    );
-} SyncTrigger;
-
-typedef struct _SyncTriggerList {
-    SyncTrigger *pTrigger;
-    struct _SyncTriggerList *next;
-} SyncTriggerList;
 
 typedef struct _SyncAlarmClientList {
     ClientPtr	client;
@@ -185,6 +139,24 @@ extern void SyncChangeCounter(
 extern void SyncDestroySystemCounter(
     pointer pCounter
 );
+
+extern int SyncVerifyFence(SyncFence **ppFence, XID fid,
+			   ClientPtr client, Mask mode);
+
+#define VERIFY_SYNC_FENCE(pFence, fid, client, mode)			\
+    do {								\
+	int rc;								\
+	rc = SyncVerifyFence(&(pFence), (fid), (client), (mode));	\
+	if (Success != rc) return rc;					\
+    } while (0)
+
+#define VERIFY_SYNC_FENCE_OR_NONE(pFence, fid, client, mode)		\
+    do {								\
+        pFence = 0;							\
+        if (None != fid)						\
+	    VERIFY_SYNC_FENCE((pFence), (fid), (client), (mode));	\
+    } while (0)
+
 extern void InitServertime(void);
 
 extern void SyncExtensionInit(void);
