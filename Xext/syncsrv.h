@@ -140,23 +140,6 @@ extern void SyncDestroySystemCounter(
     pointer pCounter
 );
 
-extern int SyncVerifyFence(SyncFence **ppFence, XID fid,
-			   ClientPtr client, Mask mode);
-
-#define VERIFY_SYNC_FENCE(pFence, fid, client, mode)			\
-    do {								\
-	int rc;								\
-	rc = SyncVerifyFence(&(pFence), (fid), (client), (mode));	\
-	if (Success != rc) return rc;					\
-    } while (0)
-
-#define VERIFY_SYNC_FENCE_OR_NONE(pFence, fid, client, mode)		\
-    do {								\
-        pFence = 0;							\
-        if (None != fid)						\
-	    VERIFY_SYNC_FENCE((pFence), (fid), (client), (mode));	\
-    } while (0)
-
 extern void InitServertime(void);
 
 extern void SyncExtensionInit(void);
