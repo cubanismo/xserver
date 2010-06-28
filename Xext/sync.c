@@ -184,17 +184,18 @@ SyncAddTriggerToSyncObject(SyncTrigger *pTrigger)
 }
 
 
-/*  Below are four possible functions that can be plugged into
- *  pTrigger->CheckTrigger, corresponding to the four possible
- *  test-types.  These functions are called after the counter's
- *  value changes but are also passed the old counter value
- *  so they can inspect both the old and new values.
- *  (PositiveTransition and NegativeTransition need to see both
- *  pieces of information.)  These functions return the truth value
- *  of the trigger.
+/*  Below are five possible functions that can be plugged into
+ *  pTrigger->CheckTrigger for counter sync objects, corresponding to
+ *  the four possible test-types, and the one possible function that
+ *  can be plugged into pTrigger->CheckTrigger for fence sync objects.
+ *  These functions are called after the sync object's state changes
+ *  but are also passed the old state so they can inspect both the old
+ *  and new values.  (PositiveTransition and NegativeTransition need to
+ *  see both pieces of information.)  These functions return the truth
+ *  value of the trigger.
  *
- *  All of them include the condition pTrigger->pCounter == NULL.
- *  This is because the spec says that a trigger with a counter value
+ *  All of them include the condition pTrigger->pSync == NULL.
+ *  This is because the spec says that a trigger with a sync value
  *  of None is always TRUE.
  */
 
